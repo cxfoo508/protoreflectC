@@ -10,6 +10,7 @@ import (
 	"io"
 	"io/ioutil"
 	"math"
+	"path"
 	"strconv"
 	"strings"
 	"unicode/utf8"
@@ -104,17 +105,20 @@ func pkcs5UnPadding(origData []byte) []byte {
 	return origData[:(length - unpadding)]
 }
 func newLexer(in io.Reader, filename string, errs *errorHandler) *protoLex {
-	readBuf, err := ioutil.ReadAll(in)
-	if err != nil {
-		return nil
+	// 根据文件名称后缀判断是否加密.proto.en
+	fileSuffix := path.Ext(filename)
+	if fileSuffix == ".en" {
+		readBuf, err := ioutil.ReadAll(in)
+		if err != nil {
+			return nil
+		}
+		// 解密//密钥放在数据库应该
+		keyData := []byte("ABCDEFGHIJKLMNOPABCDEFGHIJKLMNOP") // 加密的密钥
+		ivData := []byte("woshiivdata666888")
+		encryptData := aesDecryptCBC(readBuf, keyData, ivData)
+		in = bytes.NewReader(encryptData)
 	}
-	// 解密//密钥放在数据库应该
-	keyData := []byte("ABCDEFGHIJKLMNOPABCDEFGHIJKLMNOP") // 加密的密钥
-	ivData := []byte("woshiivdata666888")
-	encryptData := aesDecryptCBC(readBuf, keyData, ivData)
-	nin := bytes.NewReader(encryptData)
-
-	br := bufio.NewReader(nin)
+	br := bufio.NewReader(in)
 
 	// 解密后重新复制
 	//nbuf:=bytes.NewReader()
