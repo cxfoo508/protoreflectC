@@ -3,9 +3,12 @@ package protoparse
 import (
 	"bufio"
 	"bytes"
+	"crypto/aes"
+	"crypto/cipher"
 	"errors"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"math"
 	"strconv"
 	"strings"
@@ -84,9 +87,37 @@ type protoLex struct {
 
 var utf8Bom = []byte{0xEF, 0xBB, 0xBF}
 
+func aesDecryptCBC(encrypted []byte, key []byte, ivD []byte) (decrypted []byte) {
+	iv := make([]byte, aes.BlockSize)
+	ivD = ivD[:16]
+	copy(iv, ivD)
+	block, _ := aes.NewCipher(key)                 // 分组秘钥
+	blockMode := cipher.NewCBCDecrypter(block, iv) // 加密模式
+	decrypted = make([]byte, len(encrypted))       // 创建数组
+	blockMode.CryptBlocks(decrypted, encrypted)    // 解密
+	decrypted = pkcs5UnPadding(decrypted)          // 去除补全码
+	return decrypted
+}
+func pkcs5UnPadding(origData []byte) []byte {
+	length := len(origData)
+	unpadding := int(origData[length-1])
+	return origData[:(length - unpadding)]
+}
 func newLexer(in io.Reader, filename string, errs *errorHandler) *protoLex {
-	br := bufio.NewReader(in)
+	readBuf, err := ioutil.ReadAll(in)
+	if err != nil {
+		return nil
+	}
+	// 解密//密钥放在数据库应该
+	keyData := []byte("ABCDEFGHIJKLMNOPABCDEFGHIJKLMNOP") // 加密的密钥
+	ivData := []byte("woshiivdata666888")
+	encryptData := aesDecryptCBC(readBuf, keyData, ivData)
+	nin := bytes.NewReader(encryptData)
 
+	br := bufio.NewReader(nin)
+
+	// 解密后重新复制
+	//nbuf:=bytes.NewReader()
 	// if file has UTF8 byte order marker preface, consume it
 	marker, err := br.Peek(3)
 	if err == nil && bytes.Equal(marker, utf8Bom) {
